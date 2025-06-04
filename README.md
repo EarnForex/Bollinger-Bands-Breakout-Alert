@@ -9,6 +9,6 @@ It is a non-repainting indicator.
 ![Examples of BB breakout signals on USD/CHF in MT5](https://github.com/EarnForex/Bollinger-Bands-Breakout-Alert/blob/main/README_Images/bb-breakout-alerts-mt5.png)
 
 A detailed description of the indicator can be found here:
-https://www.earnforex.com/metatrader-indicators/bollinger-bands-breakout-alert/
+https://www.earnforex.com/indicators/bollinger-bands-breakout-alert/
 
 Any contributions to the code are welcome!
