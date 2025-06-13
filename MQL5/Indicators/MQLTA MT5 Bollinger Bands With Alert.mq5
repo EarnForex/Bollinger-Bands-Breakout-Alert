@@ -1,7 +1,7 @@
-#property link          "https://www.earnforex.com/metatrader-indicators/bollinger-bands-breakout-alert/"
-#property version       "1.05"
+#property link          "https://www.earnforex.com/indicators/bollinger-bands-breakout-alert/"
+#property version       "1.06"
 #property strict
-#property copyright     "EarnForex.com - 2019-2024"
+#property copyright     "EarnForex.com - 2019-2025"
 #property description   "The classic Bollinger Bands with more features."
 #property description   ""
 #property description   "WARNING: Use this software at your own risk."
@@ -11,22 +11,23 @@
 #property icon          "\\Files\\EF-Icon-64x64px.ico"
 
 #property indicator_chart_window
-#property indicator_buffers 3
-#property indicator_plots 3
+#property indicator_buffers 4
+#property indicator_plots 4
 #property indicator_color1 clrLightSeaGreen
 #property indicator_color2 clrLightSeaGreen
 #property indicator_color3 clrLightSeaGreen
 #property indicator_type1 DRAW_LINE
 #property indicator_type2 DRAW_LINE
 #property indicator_type3 DRAW_LINE
+#property indicator_type4 DRAW_NONE
 #property indicator_width1  1
 #property indicator_width2  1
 #property indicator_width3  1
 #property indicator_label1  "Bollinger Moving Average"
 #property indicator_label2  "Bollinger Upper Band"
 #property indicator_label3  "Bollinger Lower Band"
+#property indicator_label4  "Signals"
 
-#include <MQLTA ErrorHandling.mqh>
 #include <MQLTA Utils.mqh>
 
 enum ENUM_TRADE_SIGNAL
@@ -59,13 +60,14 @@ input ENUM_APPLIED_PRICE InpBandsAppliedPrice = PRICE_CLOSE; // Bands Applied Pr
 input ENUM_ALERT_SIGNAL AlertSignal = ON_BREAK_OUT;          // Alert Signal When
 input ENUM_CANDLE_TO_CHECK CandleToCheck = CURRENT_CANDLE;   // Candle To Use For Analysis
 input bool IgnoreSameCandleCrosses = false;         // Ignore Same Candle Crosses
-input int BarsToScan = 500;                         // Number Of Candles To Analyze
+input int BarsToScan = 500;                         // Number Of Candles To Analyze (0 = All)
 
 input string Comment_3 = "====================";    // Notification Options
 input bool EnableNotify = false;                    // Enable Notifications Feature
 input bool SendAlert = true;                        // Send Alert Notification
 input bool SendApp = true;                          // Send Notification to Mobile
 input bool SendEmail = true;                        // Send Notification via Email
+input bool SignalBuffer = false;                    // Output Signals to Buffer #3?
 
 input string Comment_4 = "====================";    // Drawing Options
 input bool EnableDrawArrows = true;                 // Draw Signal Arrows
@@ -78,6 +80,7 @@ input int ArrowSize = 3;                            // Arrow Size (1-5)
 double BufferUpperBand[];
 double BufferLowerBand[];
 double BufferSMA[];
+double BufferSignal[];
 
 int BufferBollingerHandle;
 
@@ -148,6 +151,13 @@ int OnCalculate(const int rates_total,
     }
     if (limit > rates_total - 2 - InpBandsPeriod - InpBandsShift) limit = rates_total - 2 - InpBandsPeriod - InpBandsShift;
     
+    if ((BarsToScan > 0) && (prev_calculated == 0))
+    {
+        PlotIndexSetInteger(0, PLOT_DRAW_BEGIN, rates_total - limit);
+        PlotIndexSetInteger(1, PLOT_DRAW_BEGIN, rates_total - limit);
+        PlotIndexSetInteger(2, PLOT_DRAW_BEGIN, rates_total - limit);
+    }
+
     if (CopyBuffer(BufferBollingerHandle, 0, -InpBandsShift, limit, BufferSMA) <= 0 ||
         CopyBuffer(BufferBollingerHandle, 1, -InpBandsShift, limit, BufferUpperBand) <= 0 ||
         CopyBuffer(BufferBollingerHandle, 2, -InpBandsShift, limit, BufferLowerBand) <= 0
@@ -156,11 +166,18 @@ int OnCalculate(const int rates_total,
         Print("Waiting for data...");
         return 0;
     }
+    if (SignalBuffer)
+    {
+        for (int i = limit - 1; i >= 0; i--)
+        {
+            BufferSignal[i] = IsSignal(i);
+        }
+    }
 
     if ((IsNewCandle) || (prev_calculated == 0))
     {
         if (EnableDrawArrows) DrawArrows(limit);
-        CleanUpOldArrows();
+        if (BarsToScan > 0) CleanUpOldArrows();
     }
 
     if (EnableDrawArrows) DrawArrow(0);
@@ -173,6 +190,7 @@ int OnCalculate(const int rates_total,
 void OnDeinit(const int reason)
 {
     CleanChart();
+    ChartRedraw();
 }
 
 void OnInitInitialization()
@@ -203,7 +221,6 @@ void InitialiseHandles()
 
 void InitialiseBuffers()
 {
-    IndicatorSetInteger(INDICATOR_DIGITS, _Digits);
     ArraySetAsSeries(BufferSMA, true);
     ArraySetAsSeries(BufferUpperBand, true);
     ArraySetAsSeries(BufferLowerBand, true);
@@ -213,17 +230,23 @@ void InitialiseBuffers()
     PlotIndexSetInteger(0, PLOT_SHIFT, InpBandsShift);
     PlotIndexSetInteger(1, PLOT_SHIFT, InpBandsShift);
     PlotIndexSetInteger(2, PLOT_SHIFT, InpBandsShift);
+    PlotIndexSetInteger(0, PLOT_DRAW_BEGIN, InpBandsPeriod + InpBandsShift);
+    PlotIndexSetInteger(1, PLOT_DRAW_BEGIN, InpBandsPeriod + InpBandsShift);
+    PlotIndexSetInteger(2, PLOT_DRAW_BEGIN, InpBandsPeriod + InpBandsShift);
+    if (SignalBuffer)
+    {
+        SetIndexBuffer(3, BufferSignal, INDICATOR_DATA);
+        ArraySetAsSeries(BufferSignal, true);
+        PlotIndexSetInteger(3, PLOT_SHIFT, InpBandsShift);
+    }
 }
 
 datetime NewCandleTime = TimeCurrent();
 bool CheckIfNewCandle()
 {
     if (NewCandleTime == iTime(Symbol(), 0, 0)) return false;
-    else
-    {
-        NewCandleTime = iTime(Symbol(), 0, 0);
-        return true;
-    }
+    NewCandleTime = iTime(Symbol(), 0, 0);
+    return true;
 }
 
 // Check if it is a trade Signal 0 = Neutral, 1 = Buy, -1 = Sell.
